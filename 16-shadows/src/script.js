@@ -1,0 +1,226 @@
+import './style.css'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import * as dat from 'lil-gui'
+
+/**
+ * Base
+ */
+// Debug
+const gui = new dat.GUI()
+gui.close()
+
+/**
+ * Texture 
+ */
+ const loadingManager = new THREE.LoadingManager()
+ loadingManager.onError = () => {
+     console.log('error');
+ }
+const textureLoader = new THREE.TextureLoader(loadingManager)
+const bakedShadow = textureLoader.load('/textures/bakedShadow.jpg')
+const simpleShadow = textureLoader.load('/textures/simpleShadow.jpg')
+const metalTexture = textureLoader.load('/textures/3.png')
+
+
+// Canvas
+const canvas = document.querySelector('canvas.webgl')
+
+// Scene
+const scene = new THREE.Scene()
+
+/**
+ * Lights
+ */
+
+// Only SpotLight, DirectionalLight and PointLight can create shadows
+// Ambient light
+const ambientLight = new THREE.AmbientLight()
+ambientLight.color = new THREE.Color(0xffffff)
+ambientLight.intensity = 0.3
+scene.add(ambientLight)
+
+// Directional light
+const directionalLight = new THREE.DirectionalLight()
+directionalLight.color = new THREE.Color(0xffffff)
+directionalLight.intensity = 0.6
+directionalLight.position.set(2, 2, - 1)
+//turn to true to enamble shadow
+directionalLight.castShadow = false
+directionalLight.shadow.mapSize.width = 1024
+directionalLight.shadow.mapSize.height = 1024
+//reducing amplitude makes shadow less pixelated
+directionalLight.shadow.camera.top = 2
+directionalLight.shadow.camera.right = 2
+directionalLight.shadow.camera.bottom = -2
+directionalLight.shadow.camera.left = -2
+directionalLight.shadow.camera.near = 1
+directionalLight.shadow.camera.far = 6
+// Does not work with PCFSoftShadowMap
+// directionalLight.shadow.radius = 10
+scene.add(directionalLight)
+
+const directionalLightCameraHelper = new THREE.CameraHelper(directionalLight.shadow.camera)
+directionalLightCameraHelper.visible = false
+scene.add(directionalLightCameraHelper)
+
+// SpotLight
+const spotLight = new THREE.SpotLight(0xffffff, 0.3, 10, Math.PI * 0.3)
+spotLight.castShadow = false 
+spotLight.position.set(0, 2, 2)
+spotLight.shadow.mapSize.width = 1024
+spotLight.shadow.mapSize.height = 1024
+spotLight.shadow.camera.fov = 30
+spotLight.shadow.camera.near = 1
+spotLight.shadow.camera.far = 5
+// scene.add(spotLight)
+scene.add(spotLight.target)
+
+const spotLightCameraHelper = new THREE.CameraHelper(spotLight.shadow.camera)
+spotLightCameraHelper.visible = false
+scene.add(spotLightCameraHelper)
+
+//PointLigt
+
+const pointLight = new THREE.PointLight(0xffffff, 0.3)
+pointLight.castShadow = false
+pointLight.position.set(- 1, 1, 0)
+pointLight.shadow.mapSize.width = 1024
+pointLight.shadow.mapSize.height = 1024
+pointLight.shadow.camera.near = 0.1
+pointLight.shadow.camera.far = 5
+// scene.add(pointLight)
+
+const pointLightCameraHelper = new THREE.CameraHelper(pointLight.shadow.camera)
+pointLightCameraHelper.visible = false
+scene.add(pointLightCameraHelper)
+
+/**
+ * Materials
+ */
+const material = new THREE.MeshStandardMaterial()
+material.roughness = 0.7
+const metalMaterial = new THREE.MeshMatcapMaterial({matcap: metalTexture })
+metalMaterial.roughness =  1
+metalMaterial.metalness =  0.1 
+
+const spherematerial = new THREE.MeshStandardMaterial({color: 'red'})
+spherematerial.roughness =  0.2 
+spherematerial.metalness =  0 
+gui.add(spherematerial, 'roughness').min(0).max(1).step(0.001)
+gui.add(spherematerial, 'metalness').min(0).max(1).step(0.001)
+
+/**
+ * Objects
+ */
+const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(5, 5),
+    // new MeshBasicMaterial({map: bakedShadow})
+    metalMaterial
+)
+plane.rotation.x = - Math.PI * 0.5
+plane.position.y = - 0.5
+plane.receiveShadow = true
+
+const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 64, 64),
+    spherematerial
+)
+sphere.castShadow = false
+
+scene.add(sphere, plane)
+const sphereShadow = new THREE.Mesh(
+    new THREE.PlaneBufferGeometry(1.5, 1.5),
+    new THREE.MeshBasicMaterial({color: '#380000', alphaMap: simpleShadow, transparent: true})
+)
+sphereShadow.rotation.x = - Math.PI * 0.5
+sphereShadow.position.y = plane.position.y + 0.001
+
+scene.add(sphereShadow)
+
+/**
+ * Sizes
+ */
+const sizes = {
+    width: window.innerWidth,
+    height: window.innerHeight
+}
+
+window.addEventListener('resize', () =>
+{
+    // Update sizes
+    sizes.width = window.innerWidth
+    sizes.height = window.innerHeight
+
+    // Update camera
+    camera.aspect = sizes.width / sizes.height
+    camera.updateProjectionMatrix()
+
+    // Update renderer
+    renderer.setSize(sizes.width, sizes.height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+})
+
+/**
+ * Camera
+ */
+// Base camera
+const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
+camera.position.x = 2
+camera.position.y = 5
+camera.position.z = 4
+scene.add(camera)
+
+// Controls
+const controls = new OrbitControls(camera, canvas)
+controls.enableDamping = false
+
+/**
+ * Renderer
+ */
+const renderer = new THREE.WebGLRenderer({
+    canvas: canvas
+})
+renderer.setSize(sizes.width, sizes.height)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.shadowMap.enabled = false
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+
+
+/**
+ * Animate
+ */
+const clock = new THREE.Clock()
+
+const tick = () =>
+{
+    const elapsedTime = clock.getElapsedTime()
+
+    //Update the sphere
+    sphere.position.x = Math.cos(elapsedTime) * 1.5
+    sphere.position.z = Math.sin(elapsedTime) * 1.5
+    //absolute function forces the value to be positive
+    sphere.position.y = Math.abs(Math.sin(elapsedTime * 2))
+
+    //Update teh shadow 
+    sphereShadow.position.x = sphere.position.x
+    sphereShadow.position.z = sphere.position.z
+    sphereShadow.material.opacity = 1 - (sphere.position.y * 0.3)
+
+    // Update controls
+    controls.update()
+
+    // Render
+    renderer.render(scene, camera)
+
+    // Call tick again on the next frame
+    window.requestAnimationFrame(tick)
+}
+
+tick()
+
+gui.add(ambientLight, 'intensity').min(0).max(1).step(0.001)
+gui.add(directionalLight, 'intensity').min(0).max(1).step(0.001)
+gui.add(directionalLight.position, 'x').min(- 5).max(5).step(0.001)
+gui.add(directionalLight.position, 'y').min(- 5).max(5).step(0.001)
+gui.add(directionalLight.position, 'z').min(- 5).max(5).step(0.001)
